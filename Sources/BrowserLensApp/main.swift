@@ -328,14 +328,22 @@ struct SearchView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(results.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            open(item)
-                        } label: {
-                            BrowserResultRow(item: item, isSelected: index == selectedIndex)
-                        }
-                        .buttonStyle(.plain)
+                        BrowserResultRow(
+                            item: item,
+                            isSelected: index == selectedIndex,
+                            select: {
+                                selectResult(at: index)
+                            },
+                            copyURL: {
+                                selectResult(at: index)
+                                copy(item)
+                            },
+                            openURL: {
+                                selectResult(at: index)
+                                open(item)
+                            }
+                        )
                         .id(item.id)
-                        .help("Open \(item.url.absoluteString)")
                     }
                 }
             }
@@ -617,8 +625,23 @@ struct SearchView: View {
         guard results.indices.contains(selectedIndex) else {
             return
         }
+        copy(results[selectedIndex])
+    }
+
+    private func selectResult(at index: Int) {
+        guard results.indices.contains(index) else {
+            return
+        }
+        let wasAlreadySelected = selectedIndex == index
+        selectedIndex = index
+        if wasAlreadySelected {
+            loadContextForSelection()
+        }
+    }
+
+    private func copy(_ item: BrowserItem) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(results[selectedIndex].url.absoluteString, forType: .string)
+        NSPasteboard.general.setString(item.url.absoluteString, forType: .string)
     }
 
     private func open(_ item: BrowserItem) {
@@ -769,6 +792,9 @@ struct BrowserResultRow: View {
 
     let item: BrowserItem
     let isSelected: Bool
+    var select: () -> Void
+    var copyURL: () -> Void
+    var openURL: () -> Void
     @State private var isHovering = false
 
     var body: some View {
@@ -805,10 +831,11 @@ struct BrowserResultRow: View {
                 }
             }
             Spacer()
-            Image(systemName: "arrow.up.forward.app")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.muted)
-                .opacity(isHovering || isSelected ? 1 : 0)
+            HStack(spacing: 6) {
+                RowActionButton(systemImage: "doc.on.doc", help: "Copy URL", action: copyURL)
+                RowActionButton(systemImage: "arrow.up.forward.app", help: "Open in browser", action: openURL)
+            }
+            .opacity(isHovering || isSelected ? 1 : 0)
         }
         .contentShape(Rectangle())
         .padding(.vertical, 9)
@@ -821,7 +848,9 @@ struct BrowserResultRow: View {
         )
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
+        .onTapGesture(perform: select)
         .onHover { isHovering = $0 }
+        .help("Select \(item.url.absoluteString)")
     }
 
     private var rowBackground: Color {
@@ -852,6 +881,31 @@ struct BrowserResultRow: View {
             return "\(item.domain) · bookmark · date unknown"
         }
         return "\(item.domain) · \(item.visitCount) visits · last seen \(item.lastSeen.formatted(date: .abbreviated, time: .shortened))"
+    }
+}
+
+struct RowActionButton: View {
+    @Environment(\.lensPalette) private var palette
+
+    var systemImage: String
+    var help: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.muted)
+                .frame(width: 28, height: 28)
+                .background(palette.elevated)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(palette.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
